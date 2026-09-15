@@ -1,0 +1,20 @@
+[
+  {
+    "experiment": "intent_classifier_cv",
+    "dataset": "intent_examples",
+    "dataset_version": "v1",
+    "params": {
+      "hidden_size": 8,
+      "epochs": 30,
+      "learning_rate": 0.2,
+      "k": 5
+    },
+    "metrics": {
+      "mean_accuracy": 0.9009852216748768,
+      "mean_macro_f1": 0.807013727013727
+    },
+    "notes": "baseline cross-validated run via main.py demo",
+    "timestamp": 1789381360.3741941,
+    "timestamp_readable": "2026-09-14 15:52:40"
+  }
+]

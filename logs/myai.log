@@ -1,0 +1,12 @@
+2026-09-14 15:53:22 [INFO] myai.api: training/loading models before starting server on port 8000
+2026-09-14 15:53:27 [INFO] myai.api: MYAI API listening on http://0.0.0.0:8000
+2026-09-14 16:25:13 [INFO] myai.api: shutting down
+2026-09-14 16:25:26 [INFO] myai.api: training/loading models before starting server on port 8000
+2026-09-14 16:25:32 [INFO] myai.api: MYAI API listening on http://0.0.0.0:8000
+2026-09-14 16:25:42 [INFO] myai.api: prediction component=intent_classifier input_len=8 output=greeting confidence=0.9971 duration_ms=2.0
+2026-09-14 16:25:42 [INFO] myai.api: POST /predict/intent -> 7.8ms
+2026-09-14 16:26:29 [INFO] myai.api: prediction component=spam_classifier input_len=39 output=spam confidence=1.0000 duration_ms=4.7
+2026-09-14 16:26:29 [INFO] myai.api: POST /predict/spam -> 20.7ms
+2026-09-14 16:26:29 [INFO] myai.api: GET /health -> 2.4ms
+2026-09-14 19:08:01 [INFO] myai.api: GET /ws -> 7.4ms
+2026-09-15 07:22:09 [INFO] myai.api: shutting down

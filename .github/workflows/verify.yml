@@ -1,0 +1,68 @@
+name: MYAI Verification
+
+# Runs automatically on every push and pull request — the project had
+# no automated CI before, so a broken commit could sit unnoticed until
+# someone happened to run verify.py by hand.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # No external dependencies to install — that's intentional,
+      # see README.md. This step exists only as a placeholder in case
+      # that ever changes.
+      - name: Confirm no external dependencies required
+        run: python3 -c "import sys; print('stdlib-only project, Python', sys.version)"
+
+      - name: Run verify.py (100+ checks)
+        run: python3 verify.py
+
+      - name: Run unit tests
+        run: |
+          python3 -c "
+          import sys
+          sys.path.insert(0, '.')
+          import tests.test_core as t1
+          import tests.test_data_science as t2
+          import tests.test_advanced_data_science as t3
+          import tests.test_reliability as t4
+          total_pass, total_fail = 0, 0
+          for mod in (t1, t2, t3, t4):
+              for name in [f for f in dir(mod) if f.startswith('test_')]:
+                  try:
+                      getattr(mod, name)()
+                      total_pass += 1
+                  except Exception as e:
+                      print(f'FAIL {name}: {e}')
+                      total_fail += 1
+          print(f'{total_pass} passed, {total_fail} failed')
+          if total_fail > 0:
+              sys.exit(1)
+          "
+
+      - name: Run the data science pipeline end-to-end
+        run: python3 data_science_report.py
+
+      - name: Smoke-test the API server
+        run: |
+          python3 api_server.py 8000 &
+          SERVER_PID=$!
+          sleep 3
+          curl -sf http://localhost:8000/health
+          kill $SERVER_PID
