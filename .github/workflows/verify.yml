@@ -24,9 +24,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # No external dependencies to install — that's intentional,
-      # see README.md. This step exists only as a placeholder in case
-      # that ever changes.
       - name: Confirm no external dependencies required
         run: python3 -c "import sys; print('stdlib-only project, Python', sys.version)"
 
@@ -61,8 +58,16 @@ jobs:
 
       - name: Smoke-test the API server
         run: |
+          rm -rf models
           python3 api_server.py 8000 &
           SERVER_PID=$!
-          sleep 3
-          curl -sf http://localhost:8000/health
+          echo "waiting for server to become ready..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+              echo "server is up after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -v http://localhost:8000/health
           kill $SERVER_PID
