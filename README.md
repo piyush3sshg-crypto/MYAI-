@@ -6,9 +6,20 @@ backpropagation, no PyTorch/TensorFlow), an RNN, a transformer, text
 generation/summarization, and a full data-science layer (EDA,
 cross-validation, statistical testing, reporting).
 
-**Zero external dependencies.** Everything runs on the Python standard
-library alone, so the whole project works inside Termux with no `pip
-install` required.
+**Zero external dependencies for the core system.** `main.py`, `verify.py`,
+`data_science_report.py`, `api_server.py`, and everything under `ai/neural.py`,
+`ai/rnn.py`, `ai/transformer.py`, `ai/vision.py` run on the Python standard
+library alone, so the core project works inside Termux with no `pip install`
+required.
+
+**One documented exception:** `ai/llm.py` (the GPT-style tensor/autograd
+module, trained on Wikipedia text via `wiki()`/`grow()`) uses `numpy` for
+performance. It is not imported by `main.py` or `verify.py`, so you don't
+need numpy unless you specifically use `ai/llm.py` or run `tests/test_llm.py`.
+If you do:
+```bash
+pip install numpy --break-system-packages
+```
 
 ## Quick start
 
