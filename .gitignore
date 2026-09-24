@@ -4,3 +4,16 @@ logs/
 models/
 ml/experiments.json
 reports/
+node_modules/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+*.apk
+*.aab
+.DS_Store
+knowledge/learned_facts.jsonl
+memory/llm_conversation.json
+data/learned_intents.jsonl
+MYAI_for_review.zip
+log.txt

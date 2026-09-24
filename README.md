@@ -160,3 +160,35 @@ print('all tests passed')
 
 See `archive/legacy_duplicates/README.md` for the file-naming cleanup
 history, and `ml/experiments.json` for a log of past training runs.
+
+## Automatic learning from chat (2026-09-22)
+
+MYAI now learns from live chat automatically — no `/teach` or `/good`
+command required:
+
+- **Intents**: every chat message the neural intent classifier already
+  answers with high confidence (>=0.75 by default) gets logged to
+  `data/learned_intents.jsonl`. The next time anything trains the
+  classifier, these get merged into the training pool alongside the
+  hand-written examples in `INTENT_EXAMPLES`, so accuracy on real usage
+  patterns compounds over time.
+- **Facts**: simple relationship/identity statements (e.g. stating who your
+  father or mother is, or your own name) are extracted with regex, applied
+  immediately to the live reasoning engine, and persisted to
+  `knowledge/learned_facts.jsonl` so they survive a restart. These are
+  stored at confidence 0.7 (vs 1.0 for hand-coded facts) so anything
+  downstream can tell curated facts from ones inferred from unreviewed
+  chat text.
+
+This is fully automatic and unreviewed by design, per an explicit choice
+made when this feature was built — there is no approval step. That is a
+deliberate trade-off: a confidently-wrong classification or a garbled
+fact can enter the dataset without a human catching it first. If that
+turns out to cause drift, the fix is either to raise `min_confidence` in
+`learning/auto_learn.py`, or to switch a call site back to the existing
+manual `/teach`/`/good` commands in `ai/llm.py`'s `chat()`.
+
+See `learning/auto_learn.py` for the implementation, and `system.py`'s
+`System.load_learned_facts()` / `data/sample_data.py`'s
+`load_intent_dataset(include_learned=...)` for where the learned data
+gets merged back in.

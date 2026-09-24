@@ -480,15 +480,33 @@ INTENT_EXAMPLES = {
 }
 
 
-def load_intent_dataset(version="v1"):
+def load_intent_dataset(version="v1", include_learned=True):
     """Return the intent-classification examples as a Dataset of
     {"text": ..., "label": ...} records — the shape most ML utilities
     (metrics, cross-validation) expect.
+
+    If include_learned is True (the default), examples that were
+    auto-logged from live chat traffic (see learning/auto_learn.py,
+    data/learned_intents.jsonl) are merged in too, deduped against the
+    hand-written examples by exact text. This is how the classifier
+    "gets smarter" from usage over time: each run retrains from whatever
+    is in this merged pool.
     """
     records = []
+    seen_text = set()
     for label, examples in INTENT_EXAMPLES.items():
         for text in examples:
             records.append({"text": text, "label": label})
+            seen_text.add(text)
+    if include_learned:
+        try:
+            from learning.auto_learn import load_learned_intents
+            for label, text in load_learned_intents():
+                if text not in seen_text:
+                    records.append({"text": text, "label": label})
+                    seen_text.add(text)
+        except ImportError:
+            pass  # learning/ package not present — fine, just skip
     return Dataset(records, name="intent_examples", version=version)
 
 

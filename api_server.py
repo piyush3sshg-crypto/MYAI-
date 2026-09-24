@@ -164,6 +164,12 @@ class MYAIRequestHandler(BaseHTTPRequestHandler):
         duration_ms = (time.time() - start) * 1000
         log_prediction(logger, "intent_classifier", text, match.intent_name,
                         confidence=match.score, duration_ms=duration_ms)
+        try:
+            from learning.auto_learn import learn_intent, learn_fact
+            learn_intent(text, self.brain.neural_intent_classifier)
+            learn_fact(text, self.brain.add_fact)
+        except ImportError:
+            pass
         self._send_json(200, {"intent": match.intent_name, "confidence": match.score})
 
     def _handle_spam(self):

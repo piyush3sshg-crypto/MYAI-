@@ -107,6 +107,16 @@ class System:
     def add_fact(self, predicate, *args, confidence=1.0, source=None):
         return self.fact_store.add(predicate, args, confidence, source)
 
+    def load_learned_facts(self, path=None):
+        """Load facts that were auto-learned from past chat sessions
+        (see learning/auto_learn.py) into the live fact store. Safe to
+        call even if the file doesn't exist yet (returns 0)."""
+        from learning.auto_learn import load_learned_facts, FACT_LOG_PATH
+        tuples = load_learned_facts(path or FACT_LOG_PATH)
+        for t in tuples:
+            self.fact_store.add(t[0], t[1:], confidence=0.7, source="auto_chat")
+        return len(tuples)
+
     def add_rule(self, rule):
         self.rule_engine.add_rule(rule)
 

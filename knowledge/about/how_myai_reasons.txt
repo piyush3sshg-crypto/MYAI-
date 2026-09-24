@@ -1,0 +1,12 @@
+When someone tells MYAI a family fact, such as who their father or mother
+is, that fact is stored as a small logical statement, for example
+parent(Arjun, Priya) meaning Arjun is a parent of Priya. Once enough facts
+like this are known, MYAI can answer questions such as who someone's
+grandfather is by chaining these statements together using logical rules,
+rather than by guessing from text. This is called symbolic reasoning, and
+it is more reliable than free-form text generation for this kind of
+factual question.
+
+MYAI also does basic arithmetic directly using a small math engine, so
+questions like what is 12 plus 7 are answered by actually calculating the
+result, not by predicting likely-looking text.

@@ -3,6 +3,7 @@ import re
 import io
 import csv
 import sys
+import gc
 import json
 import math
 import time
@@ -544,6 +545,13 @@ class Index:
         return [(self.docs[i], v) for v, i in sc[:k]]
 
 
+QUESTION_WORDS = {
+    "how", "what", "why", "who", "when", "where", "which", "many", "much",
+    "is", "are", "does", "do", "did", "was", "were", "can", "could", "would",
+    "there", "any", "some",
+    "kya", "kaun", "kab", "kahan", "kyun", "kaise", "kitna", "kitne", "kitni",
+}
+
 PROFILE_RULES = [
     ("name", re.compile(rf"(?:my name is|i am called|i'm called|mera naam|mera nam|mera name)\s+([^\s{SYMS}]+)", re.I)),
     ("city", re.compile(rf"(?:i live in|i stay in|i am from|main)\s+([^\s{SYMS}]+)\s+(?:mein\s+rehta|mein\s+rehti|mein\s+rahta|mein\s+rahti|se hoon|se hu)|(?:i live in|i stay in|i am from)\s+([^\s{SYMS}]+)", re.I)),
@@ -602,6 +610,13 @@ class Memory:
             val = next((g for g in m.groups() if g), None)
             if not val:
                 continue
+            if val.lower() in QUESTION_WORDS:
+                # e.g. "mera naam kya hai" (a QUESTION about the name) also
+                # matches the "mera naam <value>" STATEMENT pattern, with
+                # "kya" captured as if it were the name. Reject captures
+                # that are actually question words so a question can never
+                # silently overwrite a previously-learned real value.
+                continue
             if key == "likes":
                 cur = self.profile.setdefault("likes", [])
                 if val.lower() not in cur:
@@ -624,7 +639,10 @@ class Memory:
 
 
 SKIP_DIRS = {".git", "__pycache__", "models", "archive", "node_modules", ".github", "logs", "tests", "venv", ".venv"}
-SKIP_FILES = {"experiments.json", "llm_conversation.json", "llm_runs.json", "dialogues.jsonl"}
+SKIP_FILES = {"experiments.json", "llm_conversation.json", "llm_runs.json", "dialogues.jsonl",
+               "README.md",  # project documentation, not domain knowledge (see CHANGES.md)
+               "package-lock.json", "package.json",  # npm metadata, not knowledge
+               "spam_dataset.csv"}  # labeled ML training data, not conversational knowledge
 TEXT_EXT = {".txt", ".md", ".rst", ".csv", ".tsv", ".json", ".jsonl"}
 
 
@@ -910,6 +928,15 @@ class LLMCore:
         return x, y, np.ones(y.shape, dtype=np.float32)
 
     def train(self, steps=600, batch=8, lr=3e-3, sft_ratio=0.5, every=25, log=print):
+        # NOTE on gc.collect() calls below: the Tensor autograd graph forms
+        # reference cycles (each node's backward closure captures the node
+        # itself to read its accumulated gradient), so Python's ref-counter
+        # alone can't reclaim a step's graph - only the cyclic collector can.
+        # Without forcing that every step, cyclic garbage piles up faster
+        # than the default GC thresholds trigger, and memory usage grows
+        # unbounded (measured: 3.5+ GB and an OOM kill within ~20-600 steps
+        # on even the smallest preset, vs a stable ~440 MB with this fix).
+        # See CHANGES.md for the investigation that found this.
         if self.net is None:
             self.build()
         ids, ex = self._lm_ids(), self._examples()
@@ -926,6 +953,8 @@ class LLMCore:
             L.backward()
             opt.step(lr * f)
             run = float(L.d) if s == 1 else 0.95 * run + 0.05 * float(L.d)
+            L = None  # drop the reference before collecting the cyclic graph
+            gc.collect()
             self.steps += 1
             if s % every == 0 or s == steps:
                 vx, vy, vw = self._batch(va, [], batch, T, False)
@@ -935,6 +964,7 @@ class LLMCore:
                 hist.append((self.steps, round(run, 4), round(vl, 4)))
                 log(f"step {self.steps} train {run:.3f} val {vl:.3f} ppl {math.exp(min(vl, 20)):.1f} {time.time() - t0:.0f}s")
                 self.save()
+                gc.collect()  # also clear the validation-pass graph
         self.save()
         self._log_run(hist, steps, len(ids), len(ex))
         return hist
@@ -966,12 +996,30 @@ class LLMCore:
         if not hits:
             return None, 0.0
         qs = set(WORD.findall(q.lower()))
-        best, bs = None, -1.0
+        q_content = {w for w in qs if self.kb.idf(w) > 1.6 and w not in QUESTION_WORDS}
+        best, best_key, best_words = None, (-1, -1.0), set()
         for doc, sc in hits:
             for s in SPL.split(doc):
-                v = sum(self.kb.idf(w) for w in set(WORD.findall(s.lower())) & qs)
-                if v > bs:
-                    best, bs = s.strip(), v
+                sw = set(WORD.findall(s.lower()))
+                overlap_idf = sum(self.kb.idf(w) for w in sw & qs)
+                # Rank primarily by how many *content* words this sentence
+                # covers (so "how/many/are" can't outrank the sentence that
+                # actually contains "continents"), then by total idf-overlap
+                # as a tiebreaker among equally on-topic candidates.
+                content_hits = len(sw & q_content) if q_content else 0
+                key = (content_hits, overlap_idf)
+                if key > best_key:
+                    best, best_key, best_words = s.strip(), key, sw
+        if best is None:
+            return None, 0.0
+        if q_content:
+            covered = len(q_content & best_words) / len(q_content)
+            if covered < 0.6:
+                # e.g. "capital of France" matching a sentence about India's
+                # capital only because both share "capital" - too weak a
+                # match to answer confidently; better to say "I don't know"
+                # than to state something false.
+                return None, 0.0
         return best, hits[0][1]
 
     def think(self, text, temp=0.7, min_conf=-3.2):
@@ -999,19 +1047,57 @@ class LLMCore:
             return "Aapko pasand hai: " + ", ".join(p["likes"]) + "."
         return None
 
+    def small_talk(self, text):
+        """Canned replies for short greetings/farewells/identity questions
+        that are too short to have any keyword overlap with the extractive
+        knowledge corpus (BM25 needs shared words, and "hi" or "tum kon ho"
+        share none with an English knowledge base). Checked before
+        extractive/generation so these always get a sensible answer."""
+        q = text.lower().strip()
+        name_stmt = re.search(
+            r"(?:my name is|i am called|i'm called|mera naam|mera nam|mera name)\s+([^\s.,!?;:()\[\]{}\"']+)",
+            text, re.I)
+        if name_stmt and name_stmt.group(1).lower() not in QUESTION_WORDS:
+            return f"Nice to meet you, {name_stmt.group(1)}!"
+        if re.fullmatch(r"(hi+|he+llo+|hey+|yo|hiya|namaste|namaskar|sup)[\s!.]*", q):
+            return "Hi! Main MYAI hoon. Aap kaise hain?"
+        if re.search(r"^(good morning|good afternoon|good evening)\b", q):
+            return "Good day to you too! How can I help?"
+        if re.fullmatch(r"(bye+|goodbye|bye bye|alvida|see you|take care)[\s!.]*", q):
+            return "Goodbye! Take care."
+        if re.fullmatch(r"(main|mai)\s+(thik|theek|thik\s*thak|theek\s*thak)\s+(hu|hoon|hu+)[\s!.]*", q):
+            return "Achha suna! Aur kuch bataiye, ya poochiye."
+        if re.fullmatch(r"i\s*'?\s*m\s+(fine|good|okay|ok|great|well)[\s!.]*", q):
+            return "Glad to hear that! What would you like to talk about?"
+        if re.search(r"who are you|what are you|tum ko+n ho|aap ko+n ho|tumhara naam kya hai|"
+                      r"aapka naam kya hai|tum kaun ho|aap kaun ho", q):
+            return ("Main MYAI hoon, ek personal AI assistant jo Python mein shuru se "
+                    "(from scratch) banaya gaya hai. Main basic sawal-jawab, math, aur family "
+                    "reasoning kar sakta hoon.")
+        if re.search(r"^(thanks|thank you|thankyou|dhanyavaad|shukriya)\b", q):
+            return "Aapka swagat hai! Aur kuch madad chahiye to bataiye."
+        return None
+
     def respond(self, text, record=True, src="llm"):
         text = norm(text)
         self.mem.learn(text)
-        direct = self.personal(text)
+        direct = self.personal(text) or self.small_talk(text)
         ans, conf = (None, -99.0) if direct else self.think(text)
         ext, kscore = self.extractive(text)
         trusted = self.val is not None and self.val < 2.6
         if direct:
             out, s = direct, "memory"
+        elif ext and kscore > 1.0:
+            # Prefer a solid keyword-matched extractive answer over generation
+            # when both are available. With a small training corpus (a few
+            # KB), a low val-loss doesn't mean fluent generation - it often
+            # means overfitting/memorization, and think() can produce
+            # garbled text even while "trusted". A decent extractive match
+            # is more reliable than generation until the corpus is much
+            # bigger. See CHANGES.md for the investigation that found this.
+            out, s = ext, "kb"
         elif ans and trusted and conf >= -2.5 and len(ans.split()) >= 2:
             out, s = ans, "llm"
-        elif ext and kscore > 1.0:
-            out, s = ext, "kb"
         elif ans and trusted:
             out, s = ans, "llm"
         else:
@@ -1092,19 +1178,39 @@ def wire(system, core=None, method=None):
         r = fn(text, *a, **k)
         kind = r.get("kind") if isinstance(r, dict) else getattr(r, "kind", None)
         if r is None or (kind is not None and kind != "handled"):
-            return _repack(r, core.respond(text))
-        core.mem.learn(text)
-        core.mem.add("u", text)
-        core.mem.add("b", _reply_text(r)[:400], "tool")
-        return r
+            result = _repack(r, core.respond(text))
+        else:
+            core.mem.learn(text)
+            core.mem.add("u", text)
+            core.mem.add("b", _reply_text(r)[:400], "tool")
+            result = r
+        # Automatic, unreviewed learning from every chat turn (no /teach
+        # or /good needed) — see learning/auto_learn.py for the safety
+        # rails (confidence threshold, dedup, lower trust score on facts).
+        try:
+            from learning.auto_learn import learn_intent, learn_fact
+            learn_intent(text, getattr(system, "neural_intent_classifier", None))
+            learn_fact(text, getattr(system, "add_fact", None))
+        except ImportError:
+            pass
+        return result
 
     setattr(system, name, wrapped)
     system.llm = core
+    try:
+        system.load_learned_facts()
+    except (ImportError, AttributeError):
+        pass
     return core
 
 
-def chat(core):
+def chat(core, system=None):
     print("MYAI LLM | /teach sawal => jawab | /good | /grow topic1,topic2 | /status | /forget | /exit")
+    if system is None:
+        print("(note: running without the reasoning System wired in - facts get "
+              "logged but not applied live, and intent-learning is off. Use "
+              "'python -m ai.llm chat' from the project root, which now wires "
+              "this up automatically, to get both.)")
     last = None
     while True:
         try:
@@ -1140,6 +1246,15 @@ def chat(core):
             r = core.respond(t)
             last = (t, r)
             print("ai>", r)
+            try:
+                from learning.auto_learn import learn_intent, learn_fact
+                if system is not None:
+                    learn_intent(t, getattr(system, "neural_intent_classifier", None))
+                    learn_fact(t, getattr(system, "add_fact", None))
+                else:
+                    learn_fact(t, None)  # log-only: nothing live to apply to
+            except ImportError:
+                pass
 
 
 def main(argv=None):
@@ -1161,7 +1276,28 @@ def main(argv=None):
     if a.cmd == "train":
         core.train(a.steps, a.batch, a.lr)
     elif a.cmd == "chat":
-        chat(core)
+        sysobj = None
+        try:
+            import os as _os
+            import sys as _sys
+            _root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+            if _root not in _sys.path:
+                _sys.path.insert(0, _root)
+            from system import System
+            sysobj = System()
+            from data.sample_data import load_intent_dataset
+            from collections import defaultdict
+            by_label = defaultdict(list)
+            for rec in load_intent_dataset().records:
+                by_label[rec["label"]].append(rec["text"])
+            for label, texts in by_label.items():
+                sysobj.register_intent_examples(label, texts)
+            sysobj.enable_neural_intents(model_path="models/intent_classifier.json")
+            wire(sysobj, core)
+        except Exception as exc:  # noqa: BLE001 - fall back rather than crash chat
+            print(f"note: starting without the reasoning System wired in ({exc})")
+            sysobj = None
+        chat(core, sysobj)
     elif a.cmd == "grow":
         grow(core.root, a.text.split(","), tuple(a.langs.split(",")))
     elif a.cmd == "ask":

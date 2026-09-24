@@ -1,0 +1,20 @@
+MYAI is a personal AI project built from scratch in Python, without relying
+on large external AI frameworks for its core reasoning. It combines several
+classic AI techniques in one place: symbolic logic (deduction, induction,
+and abduction) for reasoning about facts, a knowledge graph for storing
+relationships such as family trees, a simple planner for sequencing
+actions, a hand-written neural network for classifying the intent behind a
+message, and a small hand-written transformer-style language model for
+open-ended conversation.
+
+The project is meant as a learning and portfolio project: a way to
+understand how these AI building blocks work by implementing them directly
+rather than only calling a pre-built library. It runs entirely inside
+Termux on a phone with no internet connection required for its core
+features, though the /grow command can optionally fetch extra background
+text from Wikipedia if the phone has an internet connection at the time.
+
+MYAI can hold a short conversation, remember a few facts about the person
+it's talking to (such as their name or who their family members are), do
+basic arithmetic, and explain simple family relationships such as who is
+whose grandparent using logical rules rather than guesswork.
