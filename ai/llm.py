@@ -1285,14 +1285,7 @@ def main(argv=None):
                 _sys.path.insert(0, _root)
             from system import System
             sysobj = System()
-            from data.sample_data import load_intent_dataset
-            from collections import defaultdict
-            by_label = defaultdict(list)
-            for rec in load_intent_dataset().records:
-                by_label[rec["label"]].append(rec["text"])
-            for label, texts in by_label.items():
-                sysobj.register_intent_examples(label, texts)
-            sysobj.enable_neural_intents(model_path="models/intent_classifier.json")
+            sysobj.enable_production_intents(model_path="models/intent_model.json")
             wire(sysobj, core)
         except Exception as exc:  # noqa: BLE001 - fall back rather than crash chat
             print(f"note: starting without the reasoning System wired in ({exc})")

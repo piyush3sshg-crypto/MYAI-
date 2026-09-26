@@ -20,6 +20,7 @@ Then:      curl -X POST http://localhost:8000/predict/intent \
 """
 import json
 import re
+import socketserver
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -28,8 +29,6 @@ from collections import defaultdict, deque
 from core.logging_setup import get_logger, log_prediction, log_error
 from system import System
 from main import seed_family_knowledge, seed_chatbot_intents
-from data.sample_data import load_spam_dataset
-from ai.neural import NeuralIntentClassifier
 
 MAX_INPUT_LENGTH = 1000
 RATE_LIMIT_REQUESTS = 30
@@ -78,16 +77,11 @@ def build_models():
     brain = System()
     seed_family_knowledge(brain)
     seed_chatbot_intents(brain)
-    brain.enable_neural_intents(
-        hidden_size=10, epochs=80, learning_rate=0.2,
-        model_path="models/intent_classifier.json",
-    )
+    brain.enable_production_intents(model_path="models/intent_model.json")
 
-    spam_dataset = load_spam_dataset()
-    spam_classifier = NeuralIntentClassifier(hidden_size=8, seed=42)
-    for record in spam_dataset:
-        spam_classifier.add_example(record["label"], record["text"])
-    spam_classifier.train(epochs=40, learning_rate=0.2, validation_split=0.0)
+    from system import _ProductionIntentAdapter
+    from production_classifier import ProductionClassifier
+    spam_classifier = _ProductionIntentAdapter(ProductionClassifier.load("models/spam_model.json"))
 
     return brain, spam_classifier
 
@@ -183,13 +177,28 @@ class MYAIRequestHandler(BaseHTTPRequestHandler):
         self._send_json(200, {"label": match.intent_name, "confidence": match.score})
 
 
+class FastBindHTTPServer(HTTPServer):
+    """HTTPServer.server_bind() calls socket.getfqdn(host) to set
+    self.server_name - a reverse-DNS lookup that's usually instant, but on
+    Termux/Android often hangs for around 2 minutes before timing out
+    (a well-known Termux networking quirk, not a bug in this code). We
+    don't use server_name for anything, so skip the slow lookup entirely.
+    """
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = host
+        self.server_port = port
+
+
 def run_server(port=8000):
     logger.info(f"training/loading models before starting server on port {port}")
     brain, spam_classifier = build_models()
     MYAIRequestHandler.brain = brain
     MYAIRequestHandler.spam_classifier = spam_classifier
 
-    server = HTTPServer(("0.0.0.0", port), MYAIRequestHandler)
+    server = FastBindHTTPServer(("0.0.0.0", port), MYAIRequestHandler)
     logger.info(f"MYAI API listening on http://0.0.0.0:{port}")
     print(f"MYAI API running at http://localhost:{port}  (Ctrl+C to stop)")
     print("Try: curl -X POST http://localhost:%d/predict/intent -H 'Content-Type: application/json' -d '{\"text\": \"hi there\"}'" % port)

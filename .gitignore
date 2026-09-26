@@ -17,3 +17,4 @@ memory/llm_conversation.json
 data/learned_intents.jsonl
 MYAI_for_review.zip
 log.txt
+server.log

@@ -66,6 +66,24 @@ class EngineResponse:
         return f"EngineResponse(kind={self.kind}, confidence={self.confidence:.3f})"
 
 
+class _ProductionIntentAdapter:
+    """Wraps ProductionClassifier (sklearn-trained, pure-Python inference)
+    so it's a drop-in replacement for NeuralIntentClassifier — every
+    existing caller only ever uses .predict(text, threshold=...) and reads
+    .intent_name / .score / .entities off the result, so nothing else
+    needs to change."""
+
+    def __init__(self, underlying):
+        self._underlying = underlying
+        self.trained = True
+
+    def predict(self, text, threshold=0.0):
+        label, score = self._underlying.predict(text)
+        if score < threshold:
+            return NeuralIntentMatch("unknown", score)
+        return NeuralIntentMatch(label, score)
+
+
 class System:
     def __init__(self):
         self.tokenizer = Tokenizer(
@@ -166,6 +184,21 @@ class System:
 
         report["retrained"] = True
         return report
+
+    def enable_production_intents(self, model_path="models/intent_model.json"):
+        """Use the production-grade scikit-learn-trained classifier
+        (TF-IDF + Logistic Regression, trained on your PC via
+        pc_training/train_production_models.py) instead of the
+        hand-rolled NeuralIntentClassifier. Sets self.neural_intent_classifier
+        to a thin adapter so every existing call site (api_server.py,
+        learning/auto_learn.py, ai/llm.py's chat wiring) keeps working
+        unchanged — they only ever call .predict(text, threshold=...)
+        and read .intent_name / .score / .entities off the result.
+        """
+        from production_classifier import ProductionClassifier
+        underlying = ProductionClassifier.load(model_path)
+        self.neural_intent_classifier = _ProductionIntentAdapter(underlying)
+        return {"loaded_from": model_path, "kind": "production_sklearn"}
 
     def learn_topic(self, topic_name, text):
         return self.topic_writer.learn(topic_name, text)

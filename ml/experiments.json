@@ -232,5 +232,113 @@
     "notes": "baseline cross-validated run via main.py demo",
     "timestamp": 1790212868.3268275,
     "timestamp_readable": "2026-09-24 06:51:08"
+  },
+  {
+    "experiment": "intent_classifier_cv",
+    "dataset": "intent_examples",
+    "dataset_version": "v1",
+    "params": {
+      "hidden_size": 8,
+      "epochs": 30,
+      "learning_rate": 0.2,
+      "k": 5
+    },
+    "metrics": {
+      "mean_accuracy": 0.9784687287089483,
+      "mean_macro_f1": 0.9405719629303151
+    },
+    "notes": "baseline cross-validated run via main.py demo",
+    "timestamp": 1790317524.6822336,
+    "timestamp_readable": "2026-09-25 11:55:24"
+  },
+  {
+    "experiment": "intent_classifier_cv",
+    "dataset": "intent_examples",
+    "dataset_version": "v1",
+    "params": {
+      "hidden_size": 8,
+      "epochs": 30,
+      "learning_rate": 0.2,
+      "k": 5
+    },
+    "metrics": {
+      "mean_accuracy": 0.9784687287089483,
+      "mean_macro_f1": 0.9405719629303151
+    },
+    "notes": "baseline cross-validated run via main.py demo",
+    "timestamp": 1790385302.0754714,
+    "timestamp_readable": "2026-09-26 06:45:02"
+  },
+  {
+    "experiment": "intent_classifier_cv",
+    "dataset": "intent_examples",
+    "dataset_version": "v1",
+    "params": {
+      "hidden_size": 8,
+      "epochs": 30,
+      "learning_rate": 0.2,
+      "k": 5
+    },
+    "metrics": {
+      "mean_accuracy": 0.9784687287089483,
+      "mean_macro_f1": 0.9405719629303151
+    },
+    "notes": "baseline cross-validated run via main.py demo",
+    "timestamp": 1790396795.85016,
+    "timestamp_readable": "2026-09-26 09:56:35"
+  },
+  {
+    "experiment": "intent_classifier_cv",
+    "dataset": "intent_examples",
+    "dataset_version": "v1",
+    "params": {
+      "hidden_size": 8,
+      "epochs": 30,
+      "learning_rate": 0.2,
+      "k": 5
+    },
+    "metrics": {
+      "mean_accuracy": 0.9784687287089483,
+      "mean_macro_f1": 0.9405719629303151
+    },
+    "notes": "baseline cross-validated run via main.py demo",
+    "timestamp": 1790397299.562848,
+    "timestamp_readable": "2026-09-26 10:04:59"
+  },
+  {
+    "experiment": "intent_classifier_cv",
+    "dataset": "intent_examples",
+    "dataset_version": "v1",
+    "params": {
+      "hidden_size": 8,
+      "epochs": 30,
+      "learning_rate": 0.2,
+      "k": 5
+    },
+    "metrics": {
+      "mean_accuracy": 0.9784687287089483,
+      "mean_macro_f1": 0.9405719629303151
+    },
+    "notes": "baseline cross-validated run via main.py demo",
+    "timestamp": 1790398822.374708,
+    "timestamp_readable": "2026-09-26 10:30:22"
+  },
+  {
+    "experiment": "intent_classifier_cv",
+    "dataset": "intent_examples",
+    "dataset_version": "v1",
+    "params": {
+      "hidden_size": 8,
+      "epochs": 30,
+      "learning_rate": 0.2,
+      "k": 5
+    },
+    "metrics": {
+      "mean_accuracy": 0.9784687287089483,
+      "mean_macro_f1": 0.9405719629303151
+    },
+    "notes": "baseline cross-validated run via main.py demo",
+    "timestamp": 1790415169.849554,
+    "timestamp_readable": "2026-09-26 15:02:49"
   }
 ]
